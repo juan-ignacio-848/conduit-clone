@@ -1,9 +1,14 @@
 (ns app.core
   (:require [reagent.core :as r]
-            [ajax.core :refer [GET POST json-response-format]]))
+            [ajax.core :refer [GET POST json-response-format]]
+            [reitit.frontend :as rf]
+            [reitit.frontend.easy :as rfe]
+            [reitit.coercion.spec :as rss]
+            [spec-tools.data-spec :as ds]))
 
 (defonce api-uri "https://conduit.productionready.io/api")
 (defonce articles-state (r/atom nil))
+(defonce routes-state (r/atom nil))
 
 (defn handler [response]
   (reset! articles-state response))
@@ -19,13 +24,25 @@
 
 (comment
   (browse-articles)
-  @articles-state
+  (swap! articles-state
+         assoc
+         :articles
+         [(assoc (first (:articles @articles-state)) :tagList ["aabcabcabcabcabcbc"])])
+  ((-> @routes-state :data :view))
+  (rfe/href ::login)
   ,)
 
 (defn header []
   [:nav {:class "navbar navbar-light"}
    [:div.container
-    [:a.navbar-brand "conduit"]]])
+    [:a.navbar-brand {:href (rfe/href ::home)} "conduit"]
+    [:ul.nav.navbar-nav.pull-xs-right
+     [:li.nav-item
+      [:a.nav-link {:href (rfe/href ::home)} "Home"]]
+     [:li.nav-item
+      [:a.nav-link {:href (rfe/href ::login)} "Login"]]
+     [:li.nav-item
+      [:a.nav-link {:href (rfe/href ::register)} "Sign Up"]]]]])
 
 (defn banner [token]
   (when-not token
@@ -78,10 +95,62 @@
      [:div.sidebar
       [:p "Popular tags"]]]]])
 
+(defn auth-signin [event]
+  (.preventDefault event)
+  (js/console.log "LOGIN"))
+
+(defn auth-signup [event]
+  (.preventDefault event)
+  (js/console.log "REGISTER"))
+
+(defn login-page []
+  [:div.auth-page>div.container.page>div.row
+   [:div.col-md-6.offset-md-3.col-xs-12
+    [:h1.text-xs-center "Sign In"]
+    [:p.text-xs-center [:a {:href (rfe/href ::register)} "Need an account?"]]
+    [:form {:on-submit auth-signin}
+     [:fieldset
+      [:fieldset.form-group
+       [:input.form-control.form-control-lg {:type :email :placeholder "Email"}]]
+      [:fieldset.form-group
+       [:input.form-control.form-control-lg {:type :password :placeholder "Password"}]]
+      [:button.btn.btn-lg.btn-primary.pull-xs-right "Sign In"]]]]])
+
+(defn register-page []
+  [:div.auth-page>div.container.page>div.row
+   [:div.col-md-6.offset-md-3.col-xs-12
+    [:h1.text-xs-center "Sign Up"]
+    [:p.text-xs-center [:a {:href (rfe/href ::login)} "Have an account?"]]
+    [:form {:on-submit auth-signup}
+     [:fieldset
+      [:fieldset.form-group
+       [:input.form-control.form-control-lg {:type :text :placeholder "Username"}]]
+      [:fieldset.form-group
+       [:input.form-control.form-control-lg {:type :email :placeholder "Email"}]]
+      [:fieldset.form-group
+       [:input.form-control.form-control-lg {:type :password :placeholder "Password"}]]
+      [:button.btn.btn-lg.btn-primary.pull-xs-right "Sign In"]]]]])
+
+(def routes
+  [
+   ["/" {:name ::home
+         :view #'home-page}]
+   ["/login" {:name ::login
+              :view #'login-page}]
+   ["/register" {:name ::register
+              :view #'register-page}]])
+
+(defn router-start! []
+  (rfe/start!
+   (rf/router routes {:data {:coercion rss/coercion}})
+   (fn [m] (reset! routes-state m))
+   {:use-fragment false}))
+
 (defn app []
   [:div
    [header]
-   [home-page]])
+   (let [current-view (-> @routes-state :data :view)]
+     (current-view))])
 
 (defn ^:dev/after-load render
   "Render the toplevel component for this app."
@@ -91,5 +160,6 @@
 (defn ^:export main
   "Run application startup logic."
   []
+  (router-start!)
   (browse-articles)
   (render))
